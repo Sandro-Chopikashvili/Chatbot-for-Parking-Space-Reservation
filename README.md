@@ -88,7 +88,7 @@ Chunk size 300 with k=3 gives Recall@3 0.84, Precision@3 0.58 and MRR 0.83 on a 
 golden set. Retrieval takes about 15 ms; end-to-end latency (dominated by the LLM) has a median of
 about 2-5 s. The input filter blocks 10/10 direct attacks and 2/10 paraphrased ones, but no secret
 leaked end to end in any of the 10 paraphrased attacks. Details and limitations are in
-[EVALUATION.md](EVALUATION.md).
+[EVALUATION.md](evaluation.md).
 
 ## Notes
 
