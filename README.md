@@ -38,7 +38,7 @@ Requires Python 3.11.
 
 ```bash
 python -m venv .venv
-.venv\Scripts\Activate.ps1          # Windows PowerShell (Linux/macOS: source .venv/bin/activate)
+.venv\Scripts\Activate.ps1          
 pip install -r requirements.txt
 python -m spacy download en_core_web_lg
 ```
