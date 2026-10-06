@@ -1,0 +1,3 @@
+Sandrika Chopika, car SS-000-SS, period 2026-10-12 14:00 to 2026-10-13 14:00, no conflicts, zone availability: A=10, B=11, C=4 (C low), recommendation: approve.
+
+Decide via the admin API: POST /admin/reservations/5/decision, or POST /admin/reply with 'approve 5' or 'reject 5 <reason>'

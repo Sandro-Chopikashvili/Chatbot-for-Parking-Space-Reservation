@@ -1,0 +1,3 @@
+Sandro Chopikashvili (SS-000-SS) requests parking from 2026-10-14 14:00 to 2026-10-15 14:00. No conflicts. Availability: A:10, B:11, C:4 (C low). Recommendation: approve.
+
+Reply: 'approve 3' or 'reject 3 <reason>'

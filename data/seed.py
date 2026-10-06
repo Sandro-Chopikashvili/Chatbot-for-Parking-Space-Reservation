@@ -18,9 +18,12 @@ CREATE TABLE reservations (
     name TEXT, surname TEXT, car_number TEXT,
     start_time TEXT, end_time TEXT,
     status TEXT DEFAULT 'pending',
+    admin_comment TEXT,
+    decided_at TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 """
+
 
 def seed():
     conn = sqlite3.connect(DB_PATH)

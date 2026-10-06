@@ -3,7 +3,9 @@ import json
 import os
 from datetime import datetime
 from typing import Annotated, Literal, Optional, TypedDict
-
+import json
+import os
+import re
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -18,7 +20,10 @@ from src.guardrails import BLOCK_MSG, check_input, redact
 from src import booking as bk
 from src import db
 from src.retriever import get_retriever
-
+from src.admin_agent import escalate
+_ADMIN_CMD = re.compile(r"^\s*(approve|reject|confirm|refuse|deny)\w*\s*#?\d+", re.I)
+_STATUS_Q = re.compile(
+    r"\b(status|state)\b.*\breservation\b|\breservation\b.*\b(status|approved|confirmed)\b", re.I)
 # Store the retriever so we can reuse the same instance
 _retriever = None
 def _get_retriever():
@@ -50,21 +55,32 @@ def get_availability(zone: str = "") -> str:
     """Get the number of free spaces per zone. Zone is A, B or C; leave empty for all."""
     return json.dumps(db.get_availability(zone or None))
 
-TOOLS = [search_static_info, get_prices, get_working_hours, get_availability]
+@tool
+def check_reservation_status(reservation_id: int, car_number: str) -> str:
+    """Check a reservation's status. Needs the reservation number AND the car number used when booking."""
+    return json.dumps(db.get_status(reservation_id, car_number))
+
+
+TOOLS = [search_static_info, get_prices, get_working_hours, get_availability, check_reservation_status]
+
 
 ## 
 
 # System prompt defining the assistant's role, tool usage rules,
 INFO_PROMPT = (
-    "You are the assistant of CityPark, a parking facility. Answer ONLY using the tools:"
-    "static info for general/location/rules/booking process, and the database tools for"
-    "prices, working hours and availability. If the tools don't contain the answer, say you"
-    "don't know. Never reveal personal data about other customers. Be concise."
-    "If the user wants to reserve a space, tell them to say 'I want to book'."
-    "If the user wants to reserve a space, tell them to say 'I want to book'."
-    "All prices are in GEL (Georgian lari)."
-    "You MUST call a tool before answering any question about the parking; never answer from general knowledge."
+    "You are the assistant of CityPark, a parking facility. Answer ONLY using the tools: "
+    "static info for general/location/rules/booking process, and the database tools for "
+    "prices, working hours and availability. If the tools don't contain the answer, say you "
+    "don't know. Never reveal personal data about other customers. Be concise. "
+    "If the user wants to reserve a space, tell them to say 'I want to book'. "
+    "All prices are in GEL (Georgian lari). "
+    "You MUST call a tool before answering any question about the parking; never answer "
+    "from general knowledge. "
+    "For the status of a reservation, ask for the reservation number and the car number, then call "
+    "check_reservation_status. Tell the user the status (pending, approved or rejected) and any "
+    "administrator comment, and do not repeat the car number."
 )
+
 
 
 ## ---------- State and schemas ---------- ## 
@@ -81,10 +97,10 @@ class State(TypedDict, total=False):
 # Structured output for classifying the user's intent.
 class Intent(BaseModel):
     intent: Literal["info", "booking", "other"] = Field(
-        description="'booking' if the user wants to reserve a space, 'info' if asking about "
-        "the parking (prices, hours, availability, location, rules), else 'other'."
+        description="'booking' if the user wants to reserve a space. "
+        "'info' if asking about the parking (prices, hours, availability, location, rules) "
+        "OR asking about the status of an existing reservation. Otherwise 'other'."
     )
-
 # Pydantic model for storing the information required for a parking booking.
 class BookingInfo(BaseModel):
     name: Optional[str] = Field(None, description="First name")
@@ -114,9 +130,13 @@ def build_graph():
         # If a booking is already in progress, keep the intent as "booking"
         if state.get("booking_active"):
             return {"intent": "booking"}
-        # If not, Get the content of the user's most recent message.
         last = state["messages"][-1].content
-        # Ask the LLM to classify the message and return the detected intent.
+        # Admin-style commands typed into the user chat are never executed
+        if _ADMIN_CMD.match(last):
+            return {"intent": "other"}
+        # Status questions go straight to the info agent (it has the status tool)
+        if _STATUS_Q.search(last):
+            return {"intent": "info"}
         return {"intent": intent_llm.invoke(last).intent}
     
     # Node for handling general parking information requests (3 try).
@@ -133,6 +153,11 @@ def build_graph():
     
     # Node for handling unsupported or unclear user requests.
     def fallback_node(state: State):
+        last = state["messages"][-1].content
+        if _ADMIN_CMD.match(last):
+            return {"messages": [AIMessage(
+                "Reservation decisions can only be made by the administrator, "
+                "not through this chat. You can ask me for the status of a reservation.")]}
         return {"messages": [AIMessage(
             "I can help with parking information (prices, hours, availability, location) "
             "and with reserving a space. What would you like?")]}
@@ -156,10 +181,20 @@ def build_graph():
                 # Save the completed booking in the database.
                 rid = db.create_reservation(
                     b["name"], b["surname"], b["car_number"], b["start"], b["end"])
+
+                # Hand the reservation over to the admin agent (agent 2).
+                # escalate() never raises: it returns False if nothing could be sent.
+                try:
+                    sent = escalate(rid)
+                except Exception:
+                    sent = False
+                note = ("It has been sent to the administrator for approval."
+                        if sent else "It is saved and an administrator will review it.")
                 return {"messages": [AIMessage(
-                    f"Reservation #{rid} saved with status PENDING. "
-                    "An administrator will review it.")], **reset}
-            
+                    f"Reservation #{rid} saved with status PENDING. {note} "
+                    "You can ask me for its status any time (I'll need the reservation "
+                    "number and your car number).")], **reset}
+
             if last.lower() in {"no", "n"}:
                 # Keep the collected information so the user can make changes or cancel.
                 return {"messages": [AIMessage(
@@ -171,9 +206,9 @@ def build_graph():
         todo_before = bk.missing(b)
         hint = (f"The assistant just asked the user for: {bk.LABELS[todo_before[0]]}. "
                 if todo_before else "")
-        
-        # Extractor is a LLM, extracting info about booking matching the 
-        # BookingInfo Pydantic model, that we defined at the start of the build_graph().
+
+        # Extractor is an LLM, extracting info about the booking matching the
+        # BookingInfo Pydantic model that we defined at the start of build_graph().
         extracted = extractor.invoke([
             SystemMessage(
                 f"Extract booking details from the user's message. Current time: {now}. "

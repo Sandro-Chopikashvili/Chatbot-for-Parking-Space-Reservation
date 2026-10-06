@@ -1,35 +1,29 @@
-# --- Core: LangChain / LangGraph ---
 langchain
 langgraph
 langchain-core
 langchain-text-splitters
 langchain-community
 
-# --- LLM provider (Groq) ---
 langchain-groq
 groq
 
-# --- Vector DB (Milvus Lite) and embeddings ---
 pymilvus
 milvus-lite
 langchain-milvus
 langchain-huggingface
 sentence-transformers
 
-# --- Guardrails (PII detection) ---
 presidio-analyzer
 presidio-anonymizer
 spacy
 
-# --- App / config ---
 python-dotenv
 pydantic
 
-# --- Tests ---
+
 pytest
 
-# --- Optional extras (uncomment if you use them) ---
-# matplotlib          # charts of evaluation results for the slides
-# python-pptx         # generate the PowerPoint from code
-# langchain-openai    # switch back to OpenAI
-# langchain-anthropic # switch to Claude
+fastapi
+uvicorn
+httpx
+requests

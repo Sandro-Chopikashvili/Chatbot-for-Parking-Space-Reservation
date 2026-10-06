@@ -80,3 +80,50 @@ def create_reservation(name, surname, car_number, start, end) -> int:
     finally:
         # Always close the database connection.
         conn.close()
+
+def get_reservation(rid: int) -> dict | None:
+    rows = _query("SELECT * FROM reservations WHERE id = ?", (rid,))
+    return rows[0] if rows else None
+
+
+def list_reservations(status: str | None = None) -> list[dict]:
+    if status:
+        return _query("SELECT * FROM reservations WHERE status = ? ORDER BY id", (status,))
+    return _query("SELECT * FROM reservations ORDER BY id")
+
+
+def decide_reservation(rid: int, decision: str, comment: str = "") -> bool:
+    """Only a pending reservation can be decided, once. Returns False otherwise."""
+    if decision not in ("approved", "rejected"):
+        raise ValueError("decision must be 'approved' or 'rejected'")
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cur = conn.execute(
+            "UPDATE reservations SET status = ?, admin_comment = ?, decided_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND status = 'pending'",
+            (decision, comment, rid),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+    finally:
+        conn.close()
+
+
+def find_conflicts(start: str, end: str, car_number: str, exclude_id: int | None = None) -> dict:
+    rows = _query(
+        "SELECT id, car_number FROM reservations "
+        "WHERE status = 'approved' AND start_time < ? AND end_time > ? AND id != ?",
+        (end, start, exclude_id or -1),
+    )
+    return {
+        "approved_overlapping": len(rows),
+        "same_car_overlapping_ids": [r["id"] for r in rows if r["car_number"] == car_number],
+    }
+
+
+def get_status(rid: int, car_number: str) -> dict:
+    """Return status only if the car number matches, so users can't read others' reservations."""
+    r = get_reservation(rid)
+    if not r or r["car_number"].upper() != car_number.strip().upper():
+        return {"found": False}
+    return {"found": True, "status": r["status"], "admin_comment": r["admin_comment"] or ""}

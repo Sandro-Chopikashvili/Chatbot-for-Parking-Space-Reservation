@@ -1,0 +1,3 @@
+Reservation 4: Sandro Chopikashvili (car SS-000-SS) from 2026-10-11 14:00 to 2026-10-12 14:00. No conflicts. Availability: A=10, B=11, C=4 (low). Recommendation: approve.
+
+Reply: 'approve 4' or 'reject 4 <reason>'
