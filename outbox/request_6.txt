@@ -1,0 +1,3 @@
+Reservation 6: Sandro Chopikashvili (car SS-000-SS) from 2026-10-14 14:00 to 2026-10-15 14:00. No conflicts. Zone C has low availability (4 free spaces). Recommendation: approve.
+
+Decide via the admin API: POST /admin/reservations/6/decision, or POST /admin/reply with 'approve 6' or 'reject 6 <reason>'
