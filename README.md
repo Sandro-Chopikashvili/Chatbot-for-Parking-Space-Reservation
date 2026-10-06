@@ -2,7 +2,6 @@
 
 A two-agent chatbot for a parking facility.
 
-- **Stage 1:** a RAG chatbot (Agent 1) answers questions and collects reservation requests.
 - **Stage 2:** an admin agent (Agent 2) escalates each reservation to a human administrator,
   who approves or rejects it through a token-protected REST API. The user can then check the decision in the chat.
 
@@ -38,33 +37,6 @@ flowchart LR
   confirmation step. Confirmed requests are saved as `pending` and escalated to the administrator.
 - **Guardrails:** regex input filter, private chunks excluded at retrieval, fixed tools only,
   and Presidio PII redaction on every output (the user's own booking data is allowed).
-
-## Stage 2: Admin agent and human approval
-
-### Flow
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant A1 as Agent 1 (chat)
-    participant DB as SQLite
-    participant A2 as Agent 2 (admin agent)
-    participant N as Notifier (console + outbox/)
-    actor Admin
-    participant API as Admin REST API
-
-    User->>A1: confirms booking
-    A1->>DB: save reservation (status = pending)
-    A1->>A2: escalate(reservation_id)
-    A2->>DB: read details, check conflicts and availability
-    A2->>N: send approval request with recommendation
-    N-->>Admin: [ADMIN NOTIFICATION] + outbox/request_N.txt
-    Admin->>API: POST /admin/reservations/N/decision (X-Admin-Token)
-    API->>DB: status = approved or rejected (once)
-    User->>A1: "status of reservation N" + car number
-    A1->>DB: get_status(N, car number)
-    A1-->>User: approved / rejected + admin comment
-```
 
 ### How the two agents communicate
 
