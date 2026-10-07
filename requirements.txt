@@ -27,3 +27,5 @@ fastapi
 uvicorn
 httpx
 requests
+
+mcp<2

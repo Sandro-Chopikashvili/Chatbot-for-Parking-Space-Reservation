@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-
+from src import admin_agent as aa
 from src import db
 from src.api import app
 
@@ -33,3 +33,19 @@ def test_double_decision_and_unknown_id(seeded_db, monkeypatch):
     assert client.post(f"/admin/reservations/{rid}/decision", json=body, headers=H).status_code == 200
     assert client.post(f"/admin/reservations/{rid}/decision", json=body, headers=H).status_code == 409
     assert client.post("/admin/reservations/999/decision", json=body, headers=H).status_code == 404
+
+def test_approval_reports_file_status(seeded_db, monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "secret")
+    monkeypatch.setattr(aa.mcp_client, "record_approved", lambda rid: "recorded")
+    rid = _make()
+    r = client.post(f"/admin/reservations/{rid}/decision",
+                    json={"decision": "approved", "comment": ""}, headers=H)
+    assert r.json()["file_status"] == "recorded"
+
+
+def test_rejection_does_not_touch_file(seeded_db, monkeypatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "secret")
+    rid = _make()
+    r = client.post(f"/admin/reservations/{rid}/decision",
+                    json={"decision": "rejected", "comment": "no"}, headers=H)
+    assert r.json()["file_status"] == "not_needed"

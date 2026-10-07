@@ -8,6 +8,8 @@ from langchain.chat_models import init_chat_model
 from langchain_core.tools import tool
 from pydantic import BaseModel
 from src import db, notifier
+from src import db, notifier, mcp_client
+
 
 # Instructions appended to every approval request so the administrator knows how to reply.
 # {id} is filled in with .format(id=reservation_id) before sending.
@@ -156,4 +158,16 @@ def apply_admin_reply(text: str, llm_fallback: bool = True) -> str:
     # decide_reservation only works on pending reservations, so a second reply is refused
     if not db.decide_reservation(rid, decision, comment):
         return f"Reservation #{rid} was already {res['status']}."
-    return f"Reservation #{rid} {decision}."
+    status = after_decision(rid, decision)
+    note = {"recorded": " Saved to the approved-reservations file.",
+            "unavailable": " File record pending (MCP server unavailable)."}.get(status, "")
+    return f"Reservation #{rid} {decision}.{note}"
+
+def after_decision(rid: int, decision: str) -> str:
+    """After a human approval, hand the reservation to the MCP server. Never raises."""
+    if decision != "approved":
+        return "not_needed"
+    try:
+        return mcp_client.record_approved(rid)
+    except Exception:
+        return "unavailable"

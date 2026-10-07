@@ -5,3 +5,4 @@ __pycache__/
 data/parking.db
 milvus*.db
 .milvus*.lock
+output/

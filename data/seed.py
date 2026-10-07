@@ -20,6 +20,7 @@ CREATE TABLE reservations (
     status TEXT DEFAULT 'pending',
     admin_comment TEXT,
     decided_at TEXT,
+    recorded_at TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 """

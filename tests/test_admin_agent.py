@@ -24,3 +24,15 @@ def test_escalate_falls_back_to_template_when_agent_fails(seeded_db, tmp_path, m
     rid = db.create_reservation("A", "B", "AB-123-CD", "2030-01-01 10:00", "2030-01-01 12:00")
     assert aa.escalate(rid) is True
     assert "approve" in (tmp_path / f"request_{rid}.txt").read_text(encoding="utf-8")
+
+def test_after_decision_only_for_approvals(monkeypatch):
+    monkeypatch.setattr(aa.mcp_client, "record_approved", lambda rid: "recorded")
+    assert aa.after_decision(1, "approved") == "recorded"
+    assert aa.after_decision(1, "rejected") == "not_needed"
+
+
+def test_after_decision_never_raises(monkeypatch):
+    def boom(rid):
+        raise RuntimeError("x")
+    monkeypatch.setattr(aa.mcp_client, "record_approved", boom)
+    assert aa.after_decision(1, "approved") == "unavailable"

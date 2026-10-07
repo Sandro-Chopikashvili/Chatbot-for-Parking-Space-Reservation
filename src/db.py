@@ -127,3 +127,27 @@ def get_status(rid: int, car_number: str) -> dict:
     if not r or r["car_number"].upper() != car_number.strip().upper():
         return {"found": False}
     return {"found": True, "status": r["status"], "admin_comment": r["admin_comment"] or ""}
+
+def claim_for_recording(rid: int) -> bool:
+    """Atomically mark an APPROVED reservation as recorded. True only for the first caller."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cur = conn.execute(
+            "UPDATE reservations SET recorded_at = CURRENT_TIMESTAMP "
+            "WHERE id = ? AND status = 'approved' AND recorded_at IS NULL",
+            (rid,),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+    finally:
+        conn.close()
+
+
+def release_claim(rid: int) -> None:
+    """Undo claim_for_recording when writing the file failed, so it can be retried."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("UPDATE reservations SET recorded_at = NULL WHERE id = ?", (rid,))
+        conn.commit()
+    finally:
+        conn.close()
