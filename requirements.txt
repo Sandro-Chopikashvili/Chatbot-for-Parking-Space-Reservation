@@ -29,3 +29,5 @@ httpx
 requests
 
 mcp<2
+
+langgraph-checkpoint-sqlite

@@ -6,3 +6,4 @@ data/parking.db
 milvus*.db
 .milvus*.lock
 output/
+data/checkpoints.db

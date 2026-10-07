@@ -49,3 +49,5 @@ def seed():
 
 if __name__ == "__main__":
     seed()
+
+(Path(__file__).resolve().parent / "checkpoints.db").unlink(missing_ok=True)

@@ -144,7 +144,8 @@ def parse_admin_reply(text: str, llm_fallback: bool = True) -> tuple[str, Option
     return "unknown", None, ""
 
 # Parse the admin's reply and apply the decision to the database
-def apply_admin_reply(text: str, llm_fallback: bool = True) -> str:
+# Parse the admin's reply and apply the decision to the database
+def apply_admin_reply(text: str, llm_fallback: bool = True, on_decided=None) -> str:
     action, rid, comment = parse_admin_reply(text, llm_fallback)
     # Couldn't tell what the admin wants, so change nothing
     if action == "unknown" or rid is None:
@@ -157,7 +158,9 @@ def apply_admin_reply(text: str, llm_fallback: bool = True) -> str:
     # decide_reservation only works on pending reservations, so a second reply is refused
     if not db.decide_reservation(rid, decision, comment):
         return f"Reservation #{rid} was already {res['status']}."
-    status = after_decision(rid, decision)
+    # on_decided lets the API resume the pipeline; the default keeps the Stage 3 behaviour
+    handler = on_decided or (lambda rid, decision, comment: after_decision(rid, decision))
+    status = handler(rid, decision, comment)
     note = {"recorded": " Saved to the approved-reservations file.",
             "unavailable": " File record pending (MCP server unavailable)."}.get(status, "")
     return f"Reservation #{rid} {decision}.{note}"

@@ -1,11 +1,10 @@
-## Imports ## 
-import json
-import os
-from datetime import datetime
-from typing import Annotated, Literal, Optional, TypedDict
+## Imports ##
 import json
 import os
 import re
+from datetime import datetime
+from typing import Annotated, Literal, Optional, TypedDict
+
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -20,10 +19,14 @@ from src.guardrails import BLOCK_MSG, check_input, redact
 from src import booking as bk
 from src import db
 from src.retriever import get_retriever
-from src.admin_agent import escalate
+from src.pipeline import start_pipeline
+
+# Admin-style commands typed into the user chat (never executed)
 _ADMIN_CMD = re.compile(r"^\s*(approve|reject|confirm|refuse|deny)\w*\s*#?\d+", re.I)
+# Questions about the status of a reservation
 _STATUS_Q = re.compile(
     r"\b(status|state)\b.*\breservation\b|\breservation\b.*\b(status|approved|confirmed)\b", re.I)
+
 # Store the retriever so we can reuse the same instance
 _retriever = None
 def _get_retriever():
@@ -39,7 +42,7 @@ def search_static_info(query: str) -> str:
     docs = _get_retriever().invoke(query)
     return "\n\n".join(f"[{d.metadata['source']}] {d.page_content}" for d in docs)
 
-## Tools for searching dynamic data stored in the SQL database. ## 
+## Tools for searching dynamic data stored in the SQL database. ##
 @tool
 def get_prices(zone: str = "") -> str:
     """Get hourly/daily prices. Zone is A, B or C; leave empty for all zones."""
@@ -64,9 +67,7 @@ def check_reservation_status(reservation_id: int, car_number: str) -> str:
 TOOLS = [search_static_info, get_prices, get_working_hours, get_availability, check_reservation_status]
 
 
-## 
-
-# System prompt defining the assistant's role, tool usage rules,
+## System prompt defining the assistant's role and tool usage rules ##
 INFO_PROMPT = (
     "You are the assistant of CityPark, a parking facility. Answer ONLY using the tools: "
     "static info for general/location/rules/booking process, and the database tools for "
@@ -82,8 +83,7 @@ INFO_PROMPT = (
 )
 
 
-
-## ---------- State and schemas ---------- ## 
+## ---------- State and schemas ---------- ##
 
 # Shared state used by the agent workflow to store conversation messages
 class State(TypedDict, total=False):
@@ -101,6 +101,7 @@ class Intent(BaseModel):
         "'info' if asking about the parking (prices, hours, availability, location, rules) "
         "OR asking about the status of an existing reservation. Otherwise 'other'."
     )
+
 # Pydantic model for storing the information required for a parking booking.
 class BookingInfo(BaseModel):
     name: Optional[str] = Field(None, description="First name")
@@ -138,8 +139,8 @@ def build_graph():
         if _STATUS_Q.search(last):
             return {"intent": "info"}
         return {"intent": intent_llm.invoke(last).intent}
-    
-    # Node for handling general parking information requests (3 try).
+
+    # Node for handling general parking information requests (3 tries).
     def info_node(state: State):
         for _ in range(3):
             try:
@@ -150,7 +151,7 @@ def build_graph():
                     raise
         return {"messages": [AIMessage(
             "Sorry, I couldn't look that up right now. Please try rephrasing your question.")]}
-    
+
     # Node for handling unsupported or unclear user requests.
     def fallback_node(state: State):
         last = state["messages"][-1].content
@@ -182,10 +183,10 @@ def build_graph():
                 rid = db.create_reservation(
                     b["name"], b["surname"], b["car_number"], b["start"], b["end"])
 
-                # Hand the reservation over to the admin agent (agent 2).
-                # escalate() never raises: it returns False if nothing could be sent.
+                # Start the reservation pipeline: Agent 2 notifies the administrator,
+                # then the run pauses until a human decides. start_pipeline never raises.
                 try:
-                    sent = escalate(rid)
+                    sent = start_pipeline(rid)
                 except Exception:
                     sent = False
                 note = ("It has been sent to the administrator for approval."
@@ -208,7 +209,7 @@ def build_graph():
                 if todo_before else "")
 
         # Extractor is an LLM, extracting info about the booking matching the
-        # BookingInfo Pydantic model that we defined at the start of build_graph().
+        # BookingInfo Pydantic model that we defined at the start of this file.
         extracted = extractor.invoke([
             SystemMessage(
                 f"Extract booking details from the user's message. Current time: {now}. "
@@ -256,14 +257,23 @@ def build_graph():
         return {"blocked": True, "messages": [AIMessage(BLOCK_MSG)]}
 
     # Node that checks the assistant's response and removes sensitive information.
+    # Node that checks the assistant's response and removes sensitive information.
     def output_guard(state: State):
         last = state["messages"][-1]
         b = state.get("booking") or {}
         full = f"{b.get('name', '')} {b.get('surname', '')}".strip()
-        clean = redact(last.content, allow=[b.get("name"), b.get("surname"), full, b.get("car_number")])
+        # The user's own booking data may be shown; hide it from the redactor, longest first
+        allowed = sorted({v for v in (full, b.get("name"), b.get("surname"), b.get("car_number")) if v},
+                         key=len, reverse=True)
+        text = last.content
+        for i, v in enumerate(allowed):
+            text = text.replace(v, f"KEEPSLOT{i}")
+        clean = redact(text, allow=[])
+        for i, v in enumerate(allowed):
+            clean = clean.replace(f"KEEPSLOT{i}", v)
         if clean == last.content:
             return {}
-        return {"messages": [AIMessage(clean, id=last.id)]}  
+        return {"messages": [AIMessage(clean, id=last.id)]}
 
 
     # Create a LangGraph workflow using the shared State structure.
