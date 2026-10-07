@@ -7,7 +7,6 @@ from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
 from langchain_core.tools import tool
 from pydantic import BaseModel
-from src import db, notifier
 from src import db, notifier, mcp_client
 
 

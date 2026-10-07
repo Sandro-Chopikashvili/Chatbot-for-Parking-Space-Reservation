@@ -48,7 +48,7 @@ def write_approved(rid: int) -> str:
             with OUTPUT_FILE.open("a", encoding="utf-8") as f:
                 f.write(line + "\n")
     except Exception:
-        db.release_claim(rid)  # allow a retry
+        db.release_claim(rid)  
         raise
     return "recorded"
 

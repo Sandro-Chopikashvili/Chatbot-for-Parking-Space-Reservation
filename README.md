@@ -108,7 +108,7 @@ Each line has the format:
 
 ```
 Name | Car Number | Reservation Period | Approval Time
-Sandrika Chopika | SS-000-SS | 2026-10-12 14:00 to 2026-10-13 14:00 | 2026-10-06 15:42:16
+Sandro Chopikashvili | SS-000-SS | 2026-10-12 14:00 to 2026-10-13 14:00 | 2026-10-06 15:42:16
 ```
 
 ### Flow
