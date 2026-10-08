@@ -43,11 +43,11 @@ def record_node(state: PipelineState):
 def close_rejected(state: PipelineState):
     return {"file_status": "not_needed"}
 
-
+# This is the fork after the pause: approved goes to record, anything else goes to close_rejected
 def _route(state: PipelineState) -> str:
     return "record" if state["decision"] == "approved" else "close_rejected"
 
-
+# Building graph
 def build_pipeline(checkpointer=None):
     g = StateGraph(PipelineState)
     g.add_node("escalate", escalate_node)
@@ -71,11 +71,11 @@ def get_pipeline():
         _pipeline = build_pipeline(SqliteSaver(conn))
     return _pipeline
 
-
+# Configuration (one run per reservation)
 def _config(rid: int) -> dict:
     return {"configurable": {"thread_id": f"reservation-{rid}"}}
 
-
+# graph.py calls this when the user confirms a booking
 def start_pipeline(rid: int) -> bool:
     """Run the pipeline until it pauses at the admin approval. Never raises.
     Returns True if the administrator was notified."""
@@ -85,12 +85,11 @@ def start_pipeline(rid: int) -> bool:
     except Exception:
         return False
 
-
+# The API calls this after the administrator decides and the status is updated in SQLite.
 def resume_pipeline(rid: int, decision: str, comment: str = "") -> str:
     """Give the human decision to the paused run. Never raises. Returns the file status."""
     try:
         p = get_pipeline()
-        # No paused run (for example a reservation created before Stage 4): use the Stage 3 path
         if not p.get_state(_config(rid)).next:
             return after_decision(rid, decision)
         result = p.invoke(Command(resume={"decision": decision, "comment": comment}), _config(rid))

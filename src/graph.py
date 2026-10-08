@@ -257,7 +257,6 @@ def build_graph():
         return {"blocked": True, "messages": [AIMessage(BLOCK_MSG)]}
 
     # Node that checks the assistant's response and removes sensitive information.
-    # Node that checks the assistant's response and removes sensitive information.
     def output_guard(state: State):
         last = state["messages"][-1]
         b = state.get("booking") or {}

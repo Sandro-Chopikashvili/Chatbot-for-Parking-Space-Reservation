@@ -1,5 +1,28 @@
 # CityPark Assistant: how it works, start to finish
 
+# CityPark Assistant: workflow
+
+1. The user asks to book. **Agent 1** (`graph.py`) collects the details and asks for confirmation.
+2. On `yes`, Agent 1 saves the reservation in `parking.db` as `pending` and calls `start_pipeline()` from `pipeline.py`.
+3. The pipeline's `escalate` node runs **Agent 2**, which checks conflicts and availability and sends the approval request to the administrator (console and `outbox/`).
+4. The `await_admin` node calls `interrupt()`. The run pauses, and its state is saved in `checkpoints.db`.
+5. The administrator approves or rejects through the **REST API**. The API updates the status in `parking.db` and calls `resume_pipeline()`.
+6. `resume_pipeline()` resumes the paused run with `p.invoke(Command(resume=...))`.
+   - **Approved:** the run goes to the `record` node.
+   - **Rejected:** the run goes to `close_rejected`, and nothing is written.
+7. The `record` node calls `after_decision()`, which calls the **MCP client**, and the MCP client calls the **MCP server**.
+8. The MCP server checks that the reservation is approved and not yet recorded, then writes the line to `output/approved_reservations.txt`.
+9. The result (`file_status`) returns up the chain to the API response. The user can ask Agent 1 for the status and sees approved or rejected, with the administrator's comment.
+
+## Call chain
+
+```
+User ─► graph.py (Agent 1) ─► start_pipeline() ─► escalate (Agent 2) ─► await_admin  ⟂ pause
+
+Administrator ─► REST API ─► resume_pipeline() ─► record ─► after_decision() ─► MCP client ─► MCP server ─► file
+```
+
+
 ## The big picture
 
 The product is a parking assistant. A user can ask questions about the parking and book a space. Every booking goes to a human administrator for approval. Once it is approved, the reservation is written to a text file.
