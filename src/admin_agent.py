@@ -144,7 +144,6 @@ def parse_admin_reply(text: str, llm_fallback: bool = True) -> tuple[str, Option
     return "unknown", None, ""
 
 # Parse the admin's reply and apply the decision to the database
-# Parse the admin's reply and apply the decision to the database
 def apply_admin_reply(text: str, llm_fallback: bool = True, on_decided=None) -> str:
     action, rid, comment = parse_admin_reply(text, llm_fallback)
     # Couldn't tell what the admin wants, so change nothing
